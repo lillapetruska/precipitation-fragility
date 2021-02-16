@@ -111,4 +111,32 @@ annual_precip <-
 
 #Test1
 
+precip_by_country <- exact_extract(precip_2006_2020, countries)
 
+lapply(precip_by_country[[1]], sum) %>% unlist()
+
+#precip_by_country %>% map(~ .[[.]] %>% sum(.) %>% unlist(.))
+
+y <- data.frame()
+for (i in 1:178) {
+  v <- lapply(precip_by_country[[i]], sum) %>% unlist()
+  y <- bind_rows(y, v)
+}
+
+y <- y %>% mutate(ID=row_number()) %>% left_join(country_index, by = "ID")
+
+y %>% pivot_longer(cols = starts_with("X"), names_to = "month", values_to = "precip")
+
+y %>% 
+  select(-coverage_fraction, -ID) %>%
+  pivot_longer(cols = starts_with("X"), names_to = "month", values_to = "precip") %>%
+  group_by_value
+  
+
+  group_by(ID, month) %>%
+  summarize(avg_monthly_prec = mean(precip, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(month = str_extract(month, "\\d{4}")) %>%
+  group_by(ID, month) %>%
+  summarize(annual_precip = sum(avg_monthly_prec, na.rm = TRUE)) %>%
+  ungroup() %>%
