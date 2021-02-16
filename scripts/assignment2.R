@@ -13,6 +13,7 @@ library(sf)
 # Parameters
 fsi <- read_rds(here::here("data/fsi.rds"))
 precip_filepath <- "~/Github/precipitation-fragility/data-raw/precip_mon_mean.nc"
+chirps_filepath <- "~/GitHub/precipitation-fragility/data/chirps-v2.0.annual.nc"
 countries_filepath <- "~/GitHub/precipitation-fragility/data/ne_50m_admin_0_countries_lakes/"
 
 country_names_recode <-
@@ -51,6 +52,8 @@ fsi <-
 
 model <- feols(total ~ 0 | country + year, data = fsi)
 
+fsi_countries <- unique(fsi$country)
+
 summary(model)
 # R^2 is 0.978897, which is very high. Means that 0.021103 of variation could
 # be explained by something else like precipitation
@@ -71,18 +74,40 @@ v <-
 
 #-------------------------------------------------------------------------------
 precip_raster <- raster::brick(precip_filepath)
+chirps_raster <- raster::brick(chirps_filepath)
 
-precip_raster %>% filter(str_detect(names, "2020")) # subset based on names
-
+names(chirps_raster)
+ # subset based on names
 precip_2006_2020 <- precip_raster %>% subset(325:504)
 
+chirps_raster <- subset(chirps_raster, c("X2006.01.01", "X2007.01.01", "X2008.01.01",
+                                         "X2009.01.01", "X2010.01.01", "X2011.01.01", "X2012.01.01", "X2013.01.01", "X2014.01.01",
+                                         "X2015.01.01", "X2016.01.01", "X2017.01.01", "X2018.01.01", "X2019.01.01", "X2020.01.01"))
+
+prec <- raster::calc(chirps_raster, fun = mean, na.rm=T)
+
 # Read in country boundaries shapefile
-countries <- read_sf(countries_filepath) %>% st_as_sf()
+countries <-
+  read_sf(countries_filepath) %>%
+  st_as_sf() %>%
+  filter(SOVEREIGNT == ADMIN) %>%
+  filter(SOVEREIGNT %in% fsi_countries)
 
-precip_by_country <- raster::extract(precip_2006_2020, countries, small = T)
+country_index <- countries$SOVEREIGNT %>% as_tibble() %>% mutate(ID = row_number())
+
+precip_by_country <- raster::extract(precip_2006_2020, countries, small = T, df = TRUE)
+
+annual_precip <-
+  precip_by_country %>%
+  pivot_longer(cols = starts_with("X"), names_to = "month", values_to = "precip") %>%
+  group_by(ID, month) %>%
+  summarize(avg_monthly_prec = mean(precip, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(month = str_extract(month, "\\d{4}")) %>%
+  group_by(ID, month) %>%
+  summarize(annual_precip = sum(avg_monthly_prec, na.rm = TRUE)) %>%
+  ungroup() %>%
+  left_join(country_index, by = "ID")
 
 
-view(precip_by_country)
-
-view(precip_by_country[[1]])
 
