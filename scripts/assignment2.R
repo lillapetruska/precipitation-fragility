@@ -109,5 +109,6 @@ annual_precip <-
   ungroup() %>%
   left_join(country_index, by = "ID")
 
+#Test1
 
 
