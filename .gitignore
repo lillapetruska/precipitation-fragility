@@ -38,22 +38,3 @@ rsconnect/
 
 # macOS file
 .DS_Store
-
-# Data folders
-data/
-data-raw/
-
-# Data files
-*.csv
-*.dta
-*.gz
-*.por
-*.rda
-*.rds
-*.sas
-*.sav
-*.stata
-*.tsv
-*.txt
-*.xpt
-.Rproj.user
