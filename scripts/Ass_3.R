@@ -1,12 +1,13 @@
-  library(tidyverse)
-  library(fixest)
-  library(here)
-  library(sf)
+library(tidyverse)
+library(fixest)
+library(here)
+library(sf)
+library(lubridate)
   
   
 `%notin%` <- negate(`%in%`)
 #Set filepaths
-fsi <- read_rds(here::here("data/fsi.rds"))
+fsi <- read_rds("~/GitHub/precipitation-fragility/data/fsi.rds")
 precip_filepath <- "~/Github/precipitation-fragility/data/precip_cleaned.rds"
 precip_final <- read_rds(precip_filepath)
 
@@ -46,6 +47,7 @@ fsi <-
 
 fsi_countries <- unique(fsi$country)
 
+precip_final <- precip_final %>% st_drop_geometry()
 precip_final <- precip_final %>% filter(SOVEREIGNT %in% fsi_countries)
 
 a <- fsi %>% unite("ID", country, year) %>% select(ID)
@@ -66,10 +68,34 @@ precip <-
 combo <- 
   precip %>% 
   left_join(fsi, by = c("country", "year")) %>% 
-  dplyr::select(country, year, yearly_prec, total)
+  dplyr::select(country, year, yearly_prec, total) %>% 
+  mutate(
+    yearly_prec_sqrd = yearly_prec^2,
+    yearly_prec_lag1 = lag(yearly_prec),
+    yearly_prec_lag1_sqrd = yearly_prec_lag1,
+    yearly_prec_lag2 = lag(yearly_prec_lag1),
+    yearly_prec_lag2_sqrd = yearly_prec_lag2
+  ) %>% 
+  drop_na()
 
 
 reg <- fixest::feols(total ~ yearly_prec | country + year, data = combo)
 summary(reg)
 
-reg <- fixest::feols(total ~ yearly_prec | country + year, data = combo)
+reg_2 <- fixest::feols(total ~ yearly_prec + yearly_prec_sqrd | country + year, data = combo)
+summary(reg_2)
+
+reg_3 <- fixest::feols(total ~ yearly_prec_lag1 | country + year, data = combo)
+summary(reg_3)
+
+reg_4 <- fixest::feols(total ~ yearly_prec + yearly_prec_lag1 + yearly_prec_lag2 | country + year, data = combo)
+summary(reg_4)
+
+reg_5 <- fixest::feols(total ~ yearly_prec + yearly_prec_sqrd + yearly_prec_lag1 + yearly_prec_lag1_sqrd + yearly_prec_lag2 + yearly_prec_lag2_sqrd | country + year, data = combo)
+summary(reg_5)
+
+reg_6 <- fixest::feols(total ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
+summary(reg_6)
+
+reg_6 <- fixest::feols(log(total) ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
+summary(reg_6)
