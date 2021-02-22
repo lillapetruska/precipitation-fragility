@@ -82,8 +82,11 @@ combo <-
 reg <- fixest::feols(total ~ yearly_prec | country + year, data = combo)
 summary(reg)
 
-reg_2 <- fixest::feols(total ~ yearly_prec + yearly_prec_sqrd | country + year, data = combo)
+reg_2 <- fixest::feols(log(total) ~ yearly_prec + yearly_prec_sqrd | country + year, data = combo)
 summary(reg_2)
+
+coef_1 <- reg_2$coefficients[1]
+coef_2 <- reg_2$coefficients[2]
 
 reg_3 <- fixest::feols(total ~ yearly_prec_lag1 | country + year, data = combo)
 summary(reg_3)
@@ -99,3 +102,8 @@ summary(reg_6)
 
 reg_6 <- fixest::feols(log(total) ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
 summary(reg_6)
+
+combo %>% 
+  mutate(pred_outcome = log(coef_1*yearly_prec + coef_2*yearly_prec_sqrd)) %>% 
+  ggplot(aes(y = pred_outcome, x = yearly_prec)) +
+  geom_point()
