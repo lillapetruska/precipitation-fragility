@@ -72,9 +72,7 @@ combo <-
   mutate(
     yearly_prec_sqrd = yearly_prec^2,
     yearly_prec_lag1 = lag(yearly_prec),
-    yearly_prec_lag1_sqrd = yearly_prec_lag1,
     yearly_prec_lag2 = lag(yearly_prec_lag1),
-    yearly_prec_lag2_sqrd = yearly_prec_lag2
   ) %>% 
   drop_na()
 
@@ -82,28 +80,62 @@ combo <-
 reg <- fixest::feols(total ~ yearly_prec | country + year, data = combo)
 summary(reg)
 
-reg_2 <- fixest::feols(log(total) ~ yearly_prec + yearly_prec_sqrd | country + year, data = combo)
+reg_2 <- fixest::feols(total ~ yearly_prec + yearly_prec_sqrd | country + year, data = combo)
 summary(reg_2)
 
-coef_1 <- reg_2$coefficients[1]
-coef_2 <- reg_2$coefficients[2]
+# reg_4 <- fixest::feols(total ~ yearly_prec + yearly_prec_lag1 + yearly_prec_lag2 | country + year, data = combo)
+# summary(reg_4)
 
-reg_3 <- fixest::feols(total ~ yearly_prec_lag1 | country + year, data = combo)
-summary(reg_3)
-
-reg_4 <- fixest::feols(total ~ yearly_prec + yearly_prec_lag1 + yearly_prec_lag2 | country + year, data = combo)
-summary(reg_4)
-
-reg_5 <- fixest::feols(total ~ yearly_prec + yearly_prec_sqrd + yearly_prec_lag1 + yearly_prec_lag1_sqrd + yearly_prec_lag2 + yearly_prec_lag2_sqrd | country + year, data = combo)
-summary(reg_5)
-
-reg_6 <- fixest::feols(total ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
+reg_6 <- fixest::feols(total ~ poly(yearly_prec, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
 summary(reg_6)
 
-reg_6 <- fixest::feols(log(total) ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
-summary(reg_6)
+coef_matrix <- matrix(nrow = 100, ncol = 6)  
+num_observations <- dim(combo)[1]  
+for (i in 1:100)  {
+  samp <- sample(1:num_observations, size = num_observations, replace = T)  
+  newdata = combo[samp,]
+  mod <- fixest::feols(total ~ poly(yearly_prec, 2) + poly(yearly_prec_lag1, 2) + poly(yearly_prec_lag2, 2) | country + year, data = newdata) 
+  coef_matrix[i,] <- coef(mod) 
+  print(i)  
+}
+
+
+# x <- 9:4303
+# plot(1, xlim = c(0, 4500), ylim = c(10, 120), las = 1, xlab = "yearly_precipitation", ylab = "fsi")  #i'm starting by initialing an empty plotting window.  then i'm looping over my bootstrap estimates, making our predicted y's for each bootstrap, and plotting the line.
+# for (i in 1:100) {
+#   yy <- x * coef_matrix[i,1] + x^2 * coef_matrix[i,2]  + x * coef_matrix[i,3] + x^2 * coef_matrix[i,4] + x * coef_matrix[i,5] + x^2 * coef_matrix[i,6]
+#   yy <- yy - yy[x = 2000]
+#   lines(x, yy, lwd = 0.5)
+# }
+
+names <- c("B1", "B2", "B3", "B4")
+
+CIs <- 
+  confint(reg_6) %>% 
+  bind_cols(reg_6$coefficients) %>% 
+  bind_cols(names) %>% 
+  rename("estimate" = ...3, "beta" = ...4)
+
+CIs %>% 
+  ggplot(aes(x = beta)) +
+  geom_point(aes(y = estimate)) +
+  geom_point(aes(y = `2.5 %`), shape = 95, size = 5) + 
+  geom_point(aes(y = `97.5 %`), shape = 95, size = 5) +
+  geom_hline(yintercept = 0) + 
+  theme_minimal()
 
 combo %>% 
-  mutate(pred_outcome = log(coef_1*yearly_prec + coef_2*yearly_prec_sqrd)) %>% 
-  ggplot(aes(y = pred_outcome, x = yearly_prec)) +
+  ggplot(aes(x = yearly_prec)) +
+  geom_histogram(binwidth = 70)
+
+combo$pred <- predict(reg_6, newdata = combo)
+
+combo %>% 
+  group_by(country) %>% 
+  mutate(average_precipitation = mean(yearly_prec)) %>% 
+  ungroup() %>% 
+  mutate(precip_dif = yearly_prec_lag2 - average_precipitation) %>% 
+  ggplot(aes(x = precip_dif, y = pred)) + 
   geom_point()
+
+
