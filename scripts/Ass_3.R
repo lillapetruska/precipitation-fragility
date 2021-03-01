@@ -74,8 +74,7 @@ combo <-
     yearly_prec_sqrd = yearly_prec^2,
     yearly_prec_lag1 = lag(yearly_prec),
     yearly_prec_lag2 = lag(yearly_prec_lag1)
-  ) %>% 
-  drop_na()
+  )
 
 
 reg <- fixest::feols(total ~ yearly_prec | country + year, data = combo)
