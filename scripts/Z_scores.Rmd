@@ -1,0 +1,150 @@
+---
+title: "Z_scores"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(fixest)
+```
+
+```{r}
+# Add variables for z-score to the dataset
+combo_1 <- mutate(group_by(combo, country), mean_prec=mean(yearly_prec)) %>% 
+            mutate(stdev=sd(yearly_prec)) %>% 
+            ungroup() %>% 
+            mutate(z=(abs(yearly_prec-mean_prec)/stdev)) %>% 
+            mutate(z_lag1=(abs(yearly_prec_lag1-mean_prec)/stdev)) %>% 
+            mutate(z_lag2=(abs(yearly_prec_lag2-mean_prec)/stdev)) %>% 
+            select(-yearly_prec_sqrd)
+  
+combo_1 <- correct_lags(combo_1)
+```
+
+```{r}
+# Because lags wrap 2006 and 2007 values to 2020 and 2019 values of the prior 
+# country, they need to be corrected
+correct_lags <- function(df){
+  for (i in 1:nrow(df)) {
+    if (df[i,2] == 2006) {
+      df[i, 5] <- NA
+      df[i, 6] <- NA
+    }
+    if (df[i,2] == 2007) {
+      df[i, 6] <- NA
+    }
+  }
+  return(df)
+}
+```
+
+```{r}
+figure_z <- function(d) {
+  max_z <- round(max(d$z))
+  min_z <- round(min(d$z))
+  mean_z <- mean(d$z)
+  reg_p5 <- fixest::feols(total ~ z + z_lag1 + z_lag2 | country + year, data=combo_1)
+
+  # Create bootstrapped samples
+  coefs <- matrix(nrow=1000,ncol=3)
+  ll = dim(d)[1]
+  for (i in 1:1000)  {
+    samp <- sample(1:ll,size=ll,replace=T)  
+    newdata = d[samp,]
+    mod1 <- fixest::feols(total ~ z + z_lag1 + z_lag2 | country + year, data=newdata)
+    coefs[i,] <- coef(mod1)
+  }
+  
+x <- seq(from=min_z, to=max_z, by=((max_z-min_z)/999))
+  
+  # Create confidence intervals for on-year 
+  boots <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,1]   # as before
+    yy <- yy - mean_z*coefs[i,1]  # as before
+    boots[i,] <- yy  # save these to the boots matrix
+  }
+  confint <- apply(boots,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+  
+  # Create confidence intervals for lag1 
+  boots_lag1 <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,2]   # as before
+    yy <- yy - mean_z*coefs[i,2]  # as before
+    boots_lag1[i,] <- yy  # save these to the boots matrix
+  }
+  confint_lag1 <- apply(boots_lag1,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+  
+  # Create confidence intervals for lag2 
+  boots_lag2 <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,3]   # as before
+    yy <- yy - mean_z*coefs[i,3]  # as before
+    boots_lag2[i,] <- yy  # save these to the boots matrix
+  }
+  confint_lag2 <- apply(boots_lag2,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+
+  # Plot bootstrapped median and confidence intervals
+  par(mfrow=c(1,2))
+  plot(NULL,xlim=c(min_z, max_z), ylim=c(min(confint_lag1, confint, confint_lag2), max(confint, confint_lag1, confint_lag2)), las=1,xlab="Precipitation z-score",ylab="Change in fragility index")
+  polygon(c(x,rev(x)),c(confint[1,],rev(confint[3,])),col=rgb(90, 17, 173, 50, max=255),border = NA) + abline(h=0)
+  
+  yy = x*reg_p5$coefficients[1]  
+  yy = yy - mean_z*reg_p5$coefficients[1]
+  lines(x,yy,col=rgb(90, 17, 173, max=255),lwd=2)
+  
+  plot(NULL,xlim=c(min_z, max_z),ylim=c(min(confint_lag1, confint, confint_lag2), max(confint, confint_lag1, confint_lag2)),las=1,xlab="Precipitation z-score", ylab=NA)
+  
+  polygon(c(x,rev(x)),c(confint_lag1[1,],rev(confint_lag1[3,])),col=rgb(81, 237, 208, 50, max=255),border = NA) + abline(h=0)
+  polygon(c(x,rev(x)),c(confint_lag2[1,],rev(confint_lag2[3,])),col=rgb(227, 98, 121, 50, max=255),border = NA) + abline(h=0)
+  
+  yy = x*reg_p5$coefficients[2]
+  yy = yy - mean_z*reg_p5$coefficients[2]
+  lines(x,yy,col=rgb(81, 237, 208, max=255),lwd=2)
+  
+  yy = x*reg_p5$coefficients[3]
+  yy = yy - mean_z*reg_p5$coefficients[3]
+  lines(x,yy,col=rgb(227, 98, 121, max=255),lwd=2)
+  return(reg_p5)
+}
+```
+
+```{r}
+figure_z(combo_1)
+```
+```{r}
+figure_z(filter(combo_1, country %in% first_quart))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% fourth_quart))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% fourth_quart_p))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% first_quart_p))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% n_america))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% africa))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% asia))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% s_america))
+```
+
+```{r}
+figure_z(filter(combo_1, country %in% oceania))
+```
+
