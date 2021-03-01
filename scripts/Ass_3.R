@@ -68,11 +68,12 @@ precip <-
 combo <- 
   precip %>% 
   left_join(fsi, by = c("country", "year")) %>% 
-  dplyr::select(country, year, yearly_prec, total) %>% 
+  dplyr::select(country, year, yearly_prec, total) %>%
+  group_by(country) %>% 
   mutate(
     yearly_prec_sqrd = yearly_prec^2,
     yearly_prec_lag1 = lag(yearly_prec),
-    yearly_prec_lag2 = lag(yearly_prec_lag1),
+    yearly_prec_lag2 = lag(yearly_prec_lag1)
   ) %>% 
   drop_na()
 
@@ -86,7 +87,7 @@ summary(reg_2)
 # reg_4 <- fixest::feols(total ~ yearly_prec + yearly_prec_lag1 + yearly_prec_lag2 | country + year, data = combo)
 # summary(reg_4)
 
-reg_6 <- fixest::feols(total ~ poly(yearly_prec, 2) + poly(yearly_prec_lag2, 2) | country + year, data = combo)
+reg_6 <- fixest::feols(total ~ poly(yearly_prec, 2, raw = TRUE) +  poly(yearly_prec_lag1, 2, raw = TRUE) + poly(yearly_prec_lag2, 2, raw = TRUE) | country + year, data = combo)
 summary(reg_6)
 
 coef_matrix <- matrix(nrow = 100, ncol = 6)  
@@ -108,7 +109,7 @@ for (i in 1:100)  {
 #   lines(x, yy, lwd = 0.5)
 # }
 
-names <- c("B1", "B2", "B3", "B4")
+names <- c("B1", "B2", "B3", "B4", "B5", "B6")
 
 CIs <- 
   confint(reg_6) %>% 
@@ -122,7 +123,11 @@ CIs %>%
   geom_point(aes(y = `2.5 %`), shape = 95, size = 5) + 
   geom_point(aes(y = `97.5 %`), shape = 95, size = 5) +
   geom_hline(yintercept = 0) + 
-  theme_minimal()
+  theme_minimal() +
+  labs(
+    y = " ",
+    x = " "
+  )
 
 combo %>% 
   ggplot(aes(x = yearly_prec)) +
@@ -131,11 +136,10 @@ combo %>%
 combo$pred <- predict(reg_6, newdata = combo)
 
 combo %>% 
-  group_by(country) %>% 
-  mutate(average_precipitation = mean(yearly_prec)) %>% 
-  ungroup() %>% 
-  mutate(precip_dif = yearly_prec_lag2 - average_precipitation) %>% 
-  ggplot(aes(x = precip_dif, y = pred)) + 
-  geom_point()
+  filter(country == "Zimbabwe") %>% 
+  ggplot(aes(x = year)) + 
+  geom_line(aes(y = total), color = "blue") + 
+  geom_line(aes(y = yearly_prec))
+
 
 
