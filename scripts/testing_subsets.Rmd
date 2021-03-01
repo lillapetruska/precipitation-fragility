@@ -1,0 +1,277 @@
+---
+title: "Figure 2 draft"
+output: html_document
+---
+
+This file relies on having output files from Ass_3.R in your environments: df `combo` and df `precip_final`.
+```{r, echo=FALSE}
+library(tidyverse)
+library(fixest)
+library(here)
+library(sf)
+library(lubridate)
+```
+
+No time lag, all countries
+```{r}
+# No time lags
+reg_p2 <- fixest::feols(total ~ poly(yearly_prec, 2, raw=TRUE) | country + year, data = combo)
+
+# Create bootstrapped samples
+coefs <- matrix(nrow=1000,ncol=2)
+ll = dim(combo)[1]
+for (i in 1:1000)  {
+  samp <- sample(1:ll,size=ll,replace=T)  
+  newdata = combo[samp,]
+  mod1 <- feols(total ~ poly(yearly_prec, 2, raw=TRUE) | country + year, data = newdata) 
+  coefs[i,] <- coef(mod1)
+}
+x <- 9:4304
+# Create confidence intervals
+boots <- matrix(nrow=1000,ncol=length(x))
+for (i in 1:1000) {
+  yy <- x*coefs[i,1] + x^2*coefs[i,2]   # as before
+  yy <- yy - yy[x=967]  # as before
+  boots[i,] <- yy  # save these to the boots matrix
+}
+confint <- apply(boots,2,function(x) quantile(x,probs=c(0.05,0.5,0.95))) 
+
+# Plot bootstrapped median and confidence intervals
+plot(1,xlim=c(0,4305),ylim=c(-2,2),las=1,xlab="Annual precipitation, mm",ylab="Change in fragility index")
+polygon(c(x,rev(x)),c(confint[1,],rev(confint[3,])),col="grey80",border = NA) + abline(h=0)
+
+yy = x*reg_p2$coefficients[1] + x^2*reg_p2$coefficients[2]  
+yy = yy - yy[x=967]
+lines(x,yy,col="blue",lwd=2)
+```
+One time lag, all countries
+```{r}
+# One time lag
+reg_p3 <- fixest::feols(total ~ poly(yearly_prec, 2, raw=TRUE) + poly(yearly_prec_lag1, 2, raw=TRUE) | country + year, data = combo)
+
+# Create bootstrapped samples
+coefs <- matrix(nrow=1000,ncol=4)
+ll = dim(combo)[1]
+for (i in 1:1000)  {
+  samp <- sample(1:ll,size=ll,replace=T)  
+  newdata = combo[samp,]
+  mod1 <- feols(total ~ poly(yearly_prec, 2, raw=TRUE) + poly(yearly_prec_lag1, 2, raw=TRUE) | country + year, data = newdata) 
+  coefs[i,] <- coef(mod1)
+}
+x <- 9:4304
+# Create confidence intervals for on-year 
+boots <- matrix(nrow=1000,ncol=length(x))
+for (i in 1:1000) {
+  yy <- x*coefs[i,1] + x^2*coefs[i,2]   # as before
+  yy <- yy - yy[x=967]  # as before
+  boots[i,] <- yy  # save these to the boots matrix
+}
+confint <- apply(boots,2,function(x) quantile(x,probs=c(0.05,0.5,0.95))) 
+
+# Create confidence intervals for lag 
+boots_lag1 <- matrix(nrow=1000,ncol=length(x))
+for (i in 1:1000) {
+  yy <- x*coefs[i,3] + x^2*coefs[i,4]   # as before
+  yy <- yy - yy[x=967]  # as before
+  boots_lag1[i,] <- yy  # save these to the boots matrix
+}
+confint_lag1 <- apply(boots_lag1,2,function(x) quantile(x,probs=c(0.05,0.5,0.95))) 
+
+# Plot bootstrapped median and confidence intervals
+plot(1,xlim=c(0,4305),ylim=c(-2,2),las=1,xlab="Annual precipitation, mm",ylab="Change in fragility index")
+polygon(c(x,rev(x)),c(confint[1,],rev(confint[3,])),col="grey80",border = NA) + abline(h=0)
+
+polygon(c(x,rev(x)),c(confint_lag1[1,],rev(confint_lag1[3,])),col="grey60",border = NA) + abline(h=0)
+
+yy = x*reg_p3$coefficients[1] + x^2*reg_p3$coefficients[2]  
+yy = yy - yy[x=967]
+lines(x,yy,col="blue",lwd=2)
+
+yy = x*reg_p3$coefficients[3] + x^2*reg_p3$coefficients[4]  
+yy = yy - yy[x=967]
+lines(x,yy,col="red",lwd=2)
+```
+
+This chunk is the specification for figure_2()
+```{r}
+#Produce our figure 2 with two lags
+figure_2 <- function(d) {
+  max_rainfall <- round(max(d$yearly_prec))
+  min_rainfall <- round(min(d$yearly_prec))
+  mean_rainfall <- mean(d$yearly_prec)
+  reg_p4 <- fixest::feols(total ~ poly(yearly_prec, 2, raw=TRUE) + poly(yearly_prec_lag1, 2, raw=TRUE) + poly(yearly_prec_lag2, 2, raw=TRUE) | country + year, data = d)
+  
+  # Create bootstrapped samples
+  coefs <- matrix(nrow=1000,ncol=6)
+  ll = dim(d)[1]
+  for (i in 1:1000)  {
+    samp <- sample(1:ll,size=ll,replace=T)  
+    newdata = d[samp,]
+    mod1 <- feols(total ~ poly(yearly_prec, 2, raw=TRUE) + poly(yearly_prec_lag1, 2, raw=TRUE) + poly(yearly_prec_lag2, 2, raw=TRUE) | country + year, data = newdata) 
+    coefs[i,] <- coef(mod1)
+  }
+  x <- min_rainfall:max_rainfall
+  # Create confidence intervals for on-year 
+  boots <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,1] + x^2*coefs[i,2]   # as before
+    yy <- yy - yy[x=mean_rainfall]  # as before
+    boots[i,] <- yy  # save these to the boots matrix
+  }
+  confint <- apply(boots,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+  
+  # Create confidence intervals for lag1 
+  boots_lag1 <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,3] + x^2*coefs[i,4]   # as before
+    yy <- yy - yy[x=mean_rainfall]  # as before
+    boots_lag1[i,] <- yy  # save these to the boots matrix
+  }
+  confint_lag1 <- apply(boots_lag1,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+  
+  # Create confidence intervals for lag2 
+  boots_lag2 <- matrix(nrow=1000,ncol=length(x))
+  for (i in 1:1000) {
+    yy <- x*coefs[i,5] + x^2*coefs[i,6]   # as before
+    yy <- yy - yy[x=mean_rainfall]  # as before
+    boots_lag2[i,] <- yy  # save these to the boots matrix
+  }
+  confint_lag2 <- apply(boots_lag2,2,function(x) quantile(x,probs=c(0.025,0.5,0.975))) 
+
+  # Plot bootstrapped median and confidence intervals
+  par(mfrow=c(1,2))
+  plot(NULL,xlim=c(min_rainfall, max_rainfall), ylim=c(min(confint_lag1, confint, confint_lag2), max(confint, confint_lag1, confint_lag2)), las=1,xlab="Annual precipitation, mm",ylab="Change in fragility index")
+  polygon(c(x,rev(x)),c(confint[1,],rev(confint[3,])),col=rgb(90, 17, 173, 50, max=255),border = NA) + abline(h=0)
+  
+  
+  
+  yy = x*reg_p4$coefficients[1] + x^2*reg_p4$coefficients[2]  
+  yy = yy - yy[x=mean_rainfall]
+  lines(x,yy,col=rgb(90, 17, 173, max=255),lwd=2)
+  
+  
+  plot(NULL,xlim=c(min_rainfall, max_rainfall),ylim=c(min(confint_lag1, confint, confint_lag2), max(confint, confint_lag1, confint_lag2)),las=1,xlab="Annual precipitation, mm", ylab=NA)
+  
+  polygon(c(x,rev(x)),c(confint_lag1[1,],rev(confint_lag1[3,])),col=rgb(81, 237, 208, 50, max=255),border = NA) + abline(h=0)
+  polygon(c(x,rev(x)),c(confint_lag2[1,],rev(confint_lag2[3,])),col=rgb(227, 98, 121, 50, max=255),border = NA) + abline(h=0)
+  
+  yy = x*reg_p4$coefficients[3] + x^2*reg_p4$coefficients[4]  
+  yy = yy - yy[x=mean_rainfall]
+  lines(x,yy,col=rgb(81, 237, 208, max=255),lwd=2)
+  
+  yy = x*reg_p4$coefficients[5] + x^2*reg_p4$coefficients[6]  
+  yy = yy - yy[x=mean_rainfall]
+  lines(x,yy,col=rgb(227, 98, 121, max=255),lwd=2)
+  return(reg_p4)
+}
+```
+
+
+Two time lags, all countries
+```{r}
+figure_2(combo)
+```
+
+Subsetting by 2006-2020 mean FSI
+```{r}
+mean_fsi <- summarize(group_by(combo, country), mean=mean(total))
+# Mean: 70.13
+# Median: 75.06
+above_median <- filter(mean_fsi, mean>75.06)$country
+at_below_median <- filter(mean_fsi, mean<=75.06)$country
+first_quart <- filter(mean_fsi, mean<=54.70)$country
+second_quart <- filter(mean_fsi, mean<=75.06 && mean > 54.70)$country
+third_quart <- filter(mean_fsi, mean>75.06 && mean < 86.04)$country
+fourth_quart <- filter(mean_fsi, mean>86.04)$country
+```
+
+Somewhat interesting difference in results when comparing more fragile to less fragile countries overall
+```{r}
+figure_2(filter(combo, country %in% above_median))
+```
+```{r}
+figure_2(filter(combo, country %in% at_below_median))
+```
+
+```{r}
+figure_2(filter(combo, country %in% first_quart))
+```
+```{r}
+figure_2(filter(combo, country %in% fourth_quart))
+```
+
+Subsetting by rainfall
+```{r}
+mean_prec <- summarize(group_by(combo, country), mean=mean(yearly_prec))
+# Mean: 970.92
+# Median: 806.32
+above_median_p <- filter(mean_prec, mean>806.32)$country
+at_below_median_p <- filter(mean_prec, mean<=806.32)$country
+first_quart_p <- filter(mean_prec, mean<=473.8)$country
+second_quart_p <- filter(mean_prec, mean<=806.32 && mean > 473.8)$country
+third_quart_p <- filter(mean_prec, mean>806.32 && mean <= 1292.35)$country
+fourth_quart_p <- filter(mean_prec, mean>1292.35)$country
+```
+
+No new significant results when comparing wettest 25% to driest 25% of countries
+```{r}
+figure_2(filter(combo, country %in% fourth_quart_p))
+```
+```{r}
+figure_2(filter(combo, country %in% first_quart_p))
+```
+No new significant results when comparing wetter vs drier half of world
+```{r}
+figure_2(filter(combo, country %in% at_below_median_p))
+```
+```{r}
+figure_2(filter(combo, country %in% above_median_p))
+```
+
+Subsetting continent (no new significant results)
+```{r}
+africa <- filter(precip_final, CONTINENT=="Africa")$SOVEREIGNT
+s_america <- filter(precip_final, CONTINENT=="South America")$SOVEREIGNT
+n_america <- filter(precip_final, CONTINENT=="North America")$SOVEREIGNT
+asia <- filter(precip_final, CONTINENT=="Asia")$SOVEREIGNT
+europe <- filter(precip_final, CONTINENT=="Europe")$SOVEREIGNT
+oceania <- filter(precip_final, CONTINENT=="Oceania")$SOVEREIGNT
+```
+
+```{r}
+figure_2(filter(combo, country %in% africa))
+```
+
+```{r}
+figure_2(filter(combo, country %in% asia))
+```
+
+```{r}
+figure_2(filter(combo, country %in% n_america))
+```
+
+```{r}
+figure_2(filter(combo, country %in% oceania))
+```
+
+```{r}
+figure_2(filter(combo, country %in% s_america))
+```
+
+By income
+```{r}
+low_income <- filter(precip_final, INCOME_GRP=="5. Low income")$SOVEREIGNT
+high_income <- filter(precip_final, INCOME_GRP=="1. High income: OECD")$SOVEREIGNT
+```
+
+Pretty interesting result here
+```{r}
+figure_2(filter(combo, country %in% low_income))
+```
+
+```{r}
+figure_2(filter(combo, country %in% high_income))
+```
+
+
+
